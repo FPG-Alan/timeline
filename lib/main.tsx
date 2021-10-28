@@ -35,25 +35,21 @@ const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
       const { width, height } = canvas.current.getBoundingClientRect();
       if (ctx) {
         ctx.clearRect(0, 0, width, height);
-        ctx.beginPath(); //ADD THIS LINE!<<<<<<<<<<<<<
-        console.log("ctx clear rect", width, height);
+        ctx.beginPath();
 
-        // if (pixelPerFrame !== 2) {
-        //   return;
-        // }
-
-        ctx.strokeStyle = "#fff";
         ctx.font = "9px Arial";
         ctx.lineWidth = 1;
 
         let currentPosition = leftOffset;
         let currentTime = 0;
-
         while (currentPosition < width) {
           if (currentPosition >= 0) {
-            console.log("draw lin!");
+            ctx.beginPath();
+            ctx.strokeStyle = "#fff";
             ctx.moveTo(currentPosition, height);
             ctx.lineTo(currentPosition, height - 20);
+            ctx.stroke();
+            ctx.closePath();
 
             ctx.strokeText(
               currentTime.toString(),
@@ -62,11 +58,24 @@ const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
             );
           }
 
-          currentPosition += BIG_STEP * FPS * pixelPerFrame;
+          const scopeWidth = BIG_STEP * FPS * pixelPerFrame;
+          const targetPosition = currentPosition + scopeWidth;
+          const tempStep = scopeWidth / 10;
+          currentPosition += tempStep;
+
+          while (currentPosition < targetPosition) {
+            ctx.strokeStyle = "#c9c9c9";
+            ctx.beginPath();
+            ctx.moveTo(currentPosition, height);
+            ctx.lineTo(currentPosition, height - 12);
+            ctx.stroke();
+            ctx.closePath();
+            currentPosition += tempStep;
+          }
+          currentPosition = targetPosition;
+          // currentPosition += BIG_STEP * FPS * pixelPerFrame;
           currentTime += BIG_STEP;
         }
-
-        ctx.stroke();
       }
     }
   }, [leftOffset, pixelPerFrame]);
