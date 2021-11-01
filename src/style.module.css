@@ -1,0 +1,87 @@
+body {
+  margin: 0;
+}
+.timeline-wrapper {
+  width: 600px;
+  font-size: 0;
+  background: #000;
+}
+
+.timeline-wrapper .tracks {
+  width: 100%;
+  overflow-x: scroll;
+  overflow-y: hidden;
+}
+
+.timeline-wrapper .tracks .track {
+  min-width: 100%;
+  background: #2e2e2e;
+
+  position: relative;
+}
+
+.timeline-wrapper .tracks .reserve-tracks {
+  background: #161616;
+  position: relative;
+}
+
+.timeline-wrapper .tracks .highlight-line {
+  position: absolute;
+  width: 100%;
+  top: 50%;
+  height: 0;
+  left: 0;
+  border-bottom: 1px solid #ed2576;
+  z-index: 1;
+}
+
+.timeline-wrapper .tracks .clip {
+  height: 100%;
+  cursor: pointer;
+  position: absolute;
+  display: inline-block;
+}
+
+.timeline-wrapper .tracks .clip .clip-extend-trigger {
+  height: 100%;
+  width: 30px;
+  position: absolute;
+
+  cursor: pointer;
+}
+
+.timeline-wrapper
+  .tracks
+  .clip
+  .clip-extend-trigger:hover
+  .clip-extend-trigger-dragger {
+  visibility: visible !important;
+}
+
+.timeline-wrapper
+  .tracks
+  .clip
+  .clip-extend-trigger
+  .clip-extend-trigger-dragger-active {
+  visibility: visible !important;
+  z-index: 1;
+}
+
+.timeline-wrapper
+  .tracks
+  .clip
+  .clip-extend-trigger
+  .clip-extend-trigger-dragger {
+  cursor: col-resize;
+  background: #21e60f;
+
+  visibility: hidden;
+
+  width: 20px;
+  height: 70%;
+  position: relative;
+
+  top: 50%;
+  transform: translateY(-50%);
+  /* left: 10px; */
+}
