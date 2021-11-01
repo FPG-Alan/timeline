@@ -313,6 +313,9 @@ function App() {
   const stickFrame = useRef(5);
 
   const tracksRef = useRef<HTMLDivElement>(null);
+
+  const seekLineRef = useRef<HTMLDivElement>(null);
+
   const forceUpdate = useForceUpdate();
 
   // -----------------------------------drag clip && move clip-----------------------------------------
@@ -600,7 +603,7 @@ function App() {
   }, []);
   // --------------------------------------------------------------------------------------------------
 
-  // -----------------------------------drag clip && extend clip-----------------------------------------
+  // -----------------------------------drag clip && extend clip---------------------------------------
   const startDragToExtend = useCallback(
     (
       e: React.MouseEvent<HTMLDivElement>,
@@ -725,9 +728,57 @@ function App() {
     forceUpdate();
   }, []);
   // --------------------------------------------------------------------------------------------------
+
+  // -----------------------------------drag seek line-------------------------------------------------
+  const startDragSeekLine = useCallback((e) => {
+    dragContext.mouseX = e.clientX;
+    console.log(seekLineRef.current.style.transform);
+    dragContext.left =
+      (seekLineRef.current.style.transform &&
+        parseInt(
+          seekLineRef.current.style.transform
+            .split("translateX(")[1]
+            .split("px)")[0]
+        )) ||
+      0;
+
+    console.log("startDragSeekLine");
+
+    window.addEventListener("mouseup", finishDragSeekline);
+    window.addEventListener("mousemove", dragSeekline);
+  }, []);
+
+  const dragSeekline = useCallback((e) => {
+    // 逻辑上， 拖拽块持续的跟着鼠标移动
+    const moveX = e.clientX - dragContext.mouseX;
+
+    console.log(seekLineRef.current);
+    if (seekLineRef.current) {
+      console.log(moveX);
+      seekLineRef.current.style.transform = `translateX(${
+        dragContext.left + moveX
+      }px)`;
+    }
+  }, []);
+  const finishDragSeekline = useCallback((e) => {
+    window.removeEventListener("mousemove", dragSeekline);
+    window.removeEventListener("mouseup", finishDragSeekline);
+  }, []);
+  // --------------------------------------------------------------------------------------------------
+
   return (
     <>
-      <div className={style["timeline-wrapper"]}>
+      <div
+        className={style["timeline-wrapper"]}
+        style={{ overflow: "hidden", position: "relative" }}
+      >
+        <div className={style["seek-line"]} ref={seekLineRef}>
+          <div
+            className={style["seek-line-header"]}
+            onMouseDown={startDragSeekLine}
+          />
+          <div className={style["seek-line-line"]} />
+        </div>
         <div
           onWheel={(e) => {
             if (e.deltaY > 0) {
@@ -752,6 +803,7 @@ function App() {
             setLeftOffset((e.target as HTMLDivElement).scrollLeft * -1);
           }}
           ref={tracksRef}
+          style={{ userSelect: "none" }}
         >
           <div className="top-empty" style={{ height: 40 }} />
           {testTracks.map((track, trackIndex) => {
@@ -908,7 +960,7 @@ function App() {
           <div className="bottom-empty" style={{ height: 40 }} />
         </div>
       </div>
-      <div>
+      <div style={{ userSelect: "none" }}>
         {<p>pixel per frame: {pixelPerFrame}</p>}
         {testTracks.map((track) => (
           <p key={track.key}>

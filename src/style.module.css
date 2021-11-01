@@ -7,6 +7,58 @@ body {
   background: #000;
 }
 
+.timeline-wrapper .seek-line {
+  position: absolute;
+  left: -5px;
+  right: 0;
+  width: 10px;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+.timeline-wrapper .seek-line .seek-line-header {
+  width: 100%;
+  height: 14px;
+  background-color: #d8d8d8;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: move;
+  pointer-events: auto;
+}
+
+.timeline-wrapper .seek-line .seek-line-header::before {
+  content: "";
+  position: absolute;
+  display: block;
+  top: 14px;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 2px solid #d8d8d8;
+  border-left: 5px solid transparent;
+}
+
+.timeline-wrapper .seek-line .seek-line-header::after {
+  content: "";
+  position: absolute;
+  display: block;
+  top: 14px;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 2px solid #d8d8d8;
+  border-right: 5px solid transparent;
+}
+
+.timeline-wrapper .seek-line .seek-line-line {
+  position: absolute;
+  height: 100%;
+  width: 0;
+  left: 4px;
+  top: 0;
+  border-left: 2px solid #d8d8d8;
+}
 .timeline-wrapper .tracks {
   width: 100%;
   overflow-x: scroll;
