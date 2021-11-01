@@ -128,6 +128,9 @@ type DragContext = {
   mouseX: number;
   mouseY: number;
 
+  accX: number;
+  accY: number;
+
   relativeX: number;
   relativeY: number;
 
@@ -135,6 +138,8 @@ type DragContext = {
   left: number;
   width: number;
   height: number;
+
+  ppf: number;
 
   enableChangeTrack: boolean;
   enableMoveX: boolean;
@@ -147,6 +152,8 @@ type DragContext = {
 let dragContext: DragContext = {
   mouseX: 0,
   mouseY: 0,
+  accX: 0,
+  accY: 0,
 
   relativeX: 0,
   relativeY: 0,
@@ -155,6 +162,8 @@ let dragContext: DragContext = {
   left: 0,
   width: 0,
   height: 0,
+
+  ppf: 0,
 
   enableChangeTrack: false,
   enableMoveX: false,
@@ -304,7 +313,7 @@ function App() {
 
   const totalFrame = useRef(calcTotalFrames());
   // 相差多少帧， 两个clip就吸附到一起
-  const stickFrame = useRef(STICK_WIDTH / pixelPerFrame);
+  const stickFrame = useRef(5);
 
   const tracksRef = useRef<HTMLDivElement>(null);
   const forceUpdate = useForceUpdate();
@@ -317,10 +326,14 @@ function App() {
 
       dragContext.mouseX = e.clientX;
       dragContext.mouseY = e.clientY;
+      dragContext.accX = 0;
+      dragContext.accY = 0;
       dragContext.top = rect.top;
       dragContext.left = rect.left;
       dragContext.width = rect.width;
       dragContext.height = rect.height;
+
+      dragContext.ppf = pixelPerFrame;
 
       // 点击时， 指针相对当前clip块左上角的X轴上的读数
       dragContext.relativeX = e.clientX - rect.left;
@@ -358,15 +371,16 @@ function App() {
 
       document.getElementsByTagName("body")[0].appendChild(currentDragDom);
 
+      window.addEventListener("mouseup", finishDragHandler);
       window.addEventListener("mousemove", dragHandler);
     },
-    []
+    [pixelPerFrame]
   );
 
   const dragHandler = useCallback((e) => {
     // 逻辑上， 拖拽块持续的跟着鼠标移动
-    const moveX = e.clientX - dragContext.mouseX;
-    const moveY = e.clientY - dragContext.mouseY;
+    const moveX = (dragContext.accX = e.clientX - dragContext.mouseX);
+    const moveY = (dragContext.accY = e.clientY - dragContext.mouseY);
 
     // 变轨相关逻辑， 在变轨逻辑内处理Y轴方向的位移
     // 5px为半径的Y方向上表现出一定的黏性手感
@@ -443,7 +457,7 @@ function App() {
         end_frame: originEndFrame,
         index: originIndex,
       } = dragContext.clip;
-      const frameShift = moveX / pixelPerFrame;
+      const frameShift = Math.ceil(moveX / dragContext.ppf);
 
       const tmpStartFrame = originStartFrame + frameShift;
       const tmpEndFrame = originEndFrame + frameShift;
@@ -491,6 +505,8 @@ function App() {
               if (tmpClip.stateNode) {
                 const rect = tmpClip.stateNode.getBoundingClientRect();
                 currentDragDom.style.left = rect.left + rect.width + "px";
+
+                console.log("吸附后left: ", rect.left + rect.width + "px");
               }
               break;
             }
@@ -511,7 +527,14 @@ function App() {
       const rect = currentDragDom.getBoundingClientRect();
       const moveX = rect.left - dragContext.left;
 
-      const shiftFrame = Math.abs(moveX) / pixelPerFrame;
+      const shiftFrame = Math.ceil(Math.abs(moveX) / dragContext.ppf);
+      console.log(
+        dragContext.ppf,
+        dragContext.left,
+        rect.left,
+        moveX,
+        shiftFrame
+      );
       if (moveX > 0) {
         dragContext.clip.start_frame += shiftFrame;
         dragContext.clip.end_frame += shiftFrame;
@@ -589,11 +612,9 @@ function App() {
     }
 
     setActiveTrack(null);
-  }, [totalFrame]);
+  }, []);
 
   useEffect(() => {
-    window.addEventListener("mouseup", finishDragHandler);
-
     return () => {
       window.removeEventListener("mouseup", finishDragHandler);
       window.removeEventListener("mousemove", dragHandler);
@@ -628,11 +649,11 @@ function App() {
             console.log(e);
 
             if (e.deltaY > 0) {
-              stickFrame.current = STICK_WIDTH / (pixelPerFrame + 1);
+              // stickFrame.current = STICK_WIDTH / (pixelPerFrame + 1);
               setPixelPerFrame(pixelPerFrame + 1);
             } else {
               if (pixelPerFrame > 1) {
-                stickFrame.current = STICK_WIDTH / (pixelPerFrame - 1);
+                // stickFrame.current = STICK_WIDTH / (pixelPerFrame - 1);
                 setPixelPerFrame(pixelPerFrame - 1);
               }
             }
@@ -729,9 +750,11 @@ function App() {
                           cursor: "pointer",
                           position: "absolute",
                           display: "inline-block",
-                          left: clip.start_frame * pixelPerFrame,
+                          left:
+                            clip.start_frame * pixelPerFrame - pixelPerFrame,
                           width:
-                            (clip.end_frame - clip.start_frame) * pixelPerFrame,
+                            (clip.end_frame - clip.start_frame + 1) *
+                            pixelPerFrame,
                         }}
                         onMouseDown={(e) => {
                           e.preventDefault();
@@ -776,6 +799,20 @@ function App() {
           })}
           <div className="bottom-empty" style={{ height: 40 }} />
         </div>
+      </div>
+      <div>
+        {<p>pixel per frame: {pixelPerFrame}</p>}
+        {testTracks.map((track) => (
+          <p key={track.key}>
+            {track.key}:
+            <br />
+            {track.clips.map((clip) => (
+              <span key={clip.key}>
+                {clip.key}: [{clip.start_frame} - {clip.end_frame}],
+              </span>
+            ))}
+          </p>
+        ))}
       </div>
     </>
   );
