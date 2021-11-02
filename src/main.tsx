@@ -12,8 +12,6 @@ import useForceUpdate from "./useForceUpdate";
 
 import style from "./style.module.css";
 
-console.log(style);
-
 type Track = {
   key: string;
   index: number;
@@ -308,7 +306,9 @@ function App() {
   const [activeClipTrigger, setActiveClipTrigger] =
     useState<ActiveClipTrigger | null>(null);
 
+  const [currentFrame, setCurrentFrame] = useState(0);
   const totalFrame = useRef(calcTotalFrames());
+
   // 相差多少帧， 两个clip就吸附到一起
   const stickFrame = useRef(5);
 
@@ -643,7 +643,6 @@ function App() {
     } else {
       const tmpWitdh = Math.max(dragContext.width - moveX, dragContext.ppf);
 
-      console.log(tmpWitdh);
       dragContext.clip.stateNode.style.width = tmpWitdh + "px";
       dragContext.clip.stateNode.style.left =
         dragContext.left + (dragContext.width - tmpWitdh) + "px";
@@ -732,7 +731,6 @@ function App() {
   // -----------------------------------drag seek line-------------------------------------------------
   const startDragSeekLine = useCallback((e) => {
     dragContext.mouseX = e.clientX;
-    console.log(seekLineRef.current.style.transform);
     dragContext.left =
       (seekLineRef.current.style.transform &&
         parseInt(
@@ -742,27 +740,22 @@ function App() {
         )) ||
       0;
 
-    console.log("startDragSeekLine");
-
+    document.getElementsByTagName("body")[0].style.userSelect = "none";
     window.addEventListener("mouseup", finishDragSeekline);
     window.addEventListener("mousemove", dragSeekline);
   }, []);
 
   const dragSeekline = useCallback((e) => {
-    // 逻辑上， 拖拽块持续的跟着鼠标移动
-    const moveX = e.clientX - dragContext.mouseX;
-
-    console.log(seekLineRef.current);
     if (seekLineRef.current) {
-      console.log(moveX);
-      seekLineRef.current.style.transform = `translateX(${
-        dragContext.left + moveX
-      }px)`;
+      seekLineRef.current.style.transform = `translateX(${e.clientX}px)`;
     }
   }, []);
   const finishDragSeekline = useCallback((e) => {
     window.removeEventListener("mousemove", dragSeekline);
     window.removeEventListener("mouseup", finishDragSeekline);
+    document.getElementsByTagName("body")[0].style.userSelect = "auto";
+
+    setCurrentFrame((e.clientX - leftOffset) / pixelPerFrame);
   }, []);
   // --------------------------------------------------------------------------------------------------
 
@@ -771,8 +764,20 @@ function App() {
       <div
         className={style["timeline-wrapper"]}
         style={{ overflow: "hidden", position: "relative" }}
+        onClick={(e) => {
+          // 从e.clientX到currentFrame
+          setCurrentFrame((e.clientX - leftOffset) / pixelPerFrame);
+        }}
       >
-        <div className={style["seek-line"]} ref={seekLineRef}>
+        <div
+          className={style["seek-line"]}
+          ref={seekLineRef}
+          style={{
+            transform: `translateX(${
+              currentFrame * pixelPerFrame + leftOffset
+            }px)`,
+          }}
+        >
           <div
             className={style["seek-line-header"]}
             onMouseDown={startDragSeekLine}
@@ -872,6 +877,7 @@ function App() {
                         }}
                         onMouseDown={(e) => {
                           e.preventDefault();
+                          e.target = clip.stateNode;
                           startDragHandler(e, track, clip);
                         }}
                         ref={(ref) => {
@@ -886,6 +892,9 @@ function App() {
                             className={style["clip-extend-trigger-dragger"]}
                             style={{
                               left: -10,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
                             }}
                             onMouseDown={(e) => {
                               e.preventDefault();
@@ -915,7 +924,10 @@ function App() {
                               activeClipTrigger.triggerDir === "right" &&
                               style["clip-extend-trigger-dragger-active"]
                             }`}
-                            style={{ left: 20 }}
+                            style={{ left: "calc(100% - 10px)" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
                             onMouseDown={(e) => {
                               e.preventDefault();
                               e.stopPropagation();

@@ -96,9 +96,11 @@ body {
 
 .timeline-wrapper .tracks .clip .clip-extend-trigger {
   height: 100%;
-  width: 30px;
+  width: 30%;
+  max-width: 30px;
   position: absolute;
 
+  /* pointer-events: none; */
   cursor: pointer;
 }
 
@@ -126,14 +128,12 @@ body {
   .clip-extend-trigger-dragger {
   cursor: col-resize;
   background: #21e60f;
-
   visibility: hidden;
-
   width: 20px;
   height: 70%;
   position: relative;
-
   top: 50%;
   transform: translateY(-50%);
-  /* left: 10px; */
+
+  pointer-events: auto;
 }
