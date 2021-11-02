@@ -1,85 +1,122 @@
-import { FC, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-type TimeLineProps = {
-  // 一般为负值， 最大为0
-  leftOffset: number;
-  width: number;
+import TimeLineCanvas from "./timeline";
 
-  pixelPerFrame: number;
+import style from "./style.module.css";
+import { Track } from "./interface";
+import TrackComponent, { wrapAsClip } from "./track";
+
+type DragContext = {
+  mouseX: number;
+  left: number;
 };
-const CANVAS_HEIGHT = 50;
-const FPS = 30;
-// 两个主时间点间距, 单位为秒
-const BIG_STEP = 1;
-const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (canvas.current) {
-      /**
-       * increase resolution of canvas
-       * @see https://stackoverflow.com/a/15666143
-       */
-      const dpr = window.devicePixelRatio || 1;
-      const bsr = 1;
-      const ratio = dpr / bsr;
-      canvas.current.width = width * ratio;
-      canvas.current.height = CANVAS_HEIGHT * ratio;
-      canvas.current.style.width = width + "px";
-      canvas.current.style.height = CANVAS_HEIGHT + "px";
-      canvas.current.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
+let dragContext: DragContext = {
+  mouseX: 0,
+  left: 0,
+};
+
+function Timeline({ data }: { data: Array<Track> }) {
+  const [leftOffset, setLeftOffset] = useState(0);
+  const [pixelPerFrame, setPixelPerFrame] = useState(2);
+  const [currentFrame, setCurrentFrame] = useState(0);
+
+  const seekLineRef = useRef<HTMLDivElement>(null);
+
+  // -----------------------------------drag seek line-------------------------------------------------
+  const startDragSeekLine = useCallback((e) => {
+    dragContext.mouseX = e.clientX;
+    dragContext.left =
+      (seekLineRef.current!.style.transform &&
+        parseInt(
+          seekLineRef
+            .current!.style.transform.split("translateX(")[1]
+            .split("px)")[0]
+        )) ||
+      0;
+
+    document.getElementsByTagName("body")[0].style.userSelect = "none";
+    window.addEventListener("mouseup", finishDragSeekline);
+    window.addEventListener("mousemove", dragSeekline);
+  }, []);
+
+  const dragSeekline = useCallback((e) => {
+    if (seekLineRef.current) {
+      seekLineRef.current.style.transform = `translateX(${e.clientX}px)`;
     }
   }, []);
-  useEffect(() => {
-    if (canvas.current) {
-      const ctx = canvas.current.getContext("2d");
-      const { width, height } = canvas.current.getBoundingClientRect();
-      if (ctx) {
-        ctx.clearRect(0, 0, width, height);
-        ctx.beginPath();
+  const finishDragSeekline = useCallback((e) => {
+    window.removeEventListener("mousemove", dragSeekline);
+    window.removeEventListener("mouseup", finishDragSeekline);
+    document.getElementsByTagName("body")[0].style.userSelect = "auto";
 
-        ctx.font = "9px Arial";
-        ctx.lineWidth = 1;
+    setCurrentFrame((e.clientX - leftOffset) / pixelPerFrame);
+  }, []);
+  // --------------------------------------------------------------------------------------------------
 
-        let currentPosition = leftOffset;
-        let currentTime = 0;
-        while (currentPosition < width) {
-          if (currentPosition >= 0) {
-            ctx.beginPath();
-            ctx.strokeStyle = "#fff";
-            ctx.moveTo(currentPosition, height);
-            ctx.lineTo(currentPosition, height - 20);
-            ctx.stroke();
-            ctx.closePath();
-
-            ctx.strokeText(
-              currentTime.toString(),
-              currentPosition + 4,
-              height - 15
-            );
-          }
-
-          const scopeWidth = BIG_STEP * FPS * pixelPerFrame;
-          const targetPosition = currentPosition + scopeWidth;
-          const tempStep = scopeWidth / 10;
-          currentPosition += tempStep;
-
-          while (currentPosition < targetPosition) {
-            ctx.strokeStyle = "#c9c9c9";
-            ctx.beginPath();
-            ctx.moveTo(currentPosition, height);
-            ctx.lineTo(currentPosition, height - 12);
-            ctx.stroke();
-            ctx.closePath();
-            currentPosition += tempStep;
-          }
-          currentPosition = targetPosition;
-          // currentPosition += BIG_STEP * FPS * pixelPerFrame;
-          currentTime += BIG_STEP;
-        }
-      }
-    }
-  }, [leftOffset, pixelPerFrame]);
-  return <canvas width={width} height={CANVAS_HEIGHT} ref={canvas} />;
-};
-
-export default TimeLine;
+  return (
+    <>
+      <div
+        className={style["timeline-wrapper"]}
+        style={{ overflow: "hidden", position: "relative" }}
+        onClick={(e) => {
+          // 从e.clientX到currentFrame
+          setCurrentFrame((e.clientX - leftOffset) / pixelPerFrame);
+        }}
+      >
+        <div
+          className={style["seek-line"]}
+          ref={seekLineRef}
+          style={{
+            transform: `translateX(${
+              currentFrame * pixelPerFrame + leftOffset
+            }px)`,
+          }}
+        >
+          <div
+            className={style["seek-line-header"]}
+            onMouseDown={startDragSeekLine}
+          />
+          <div className={style["seek-line-line"]} />
+        </div>
+        <div
+          onWheel={(e) => {
+            if (e.deltaY > 0) {
+              setPixelPerFrame(pixelPerFrame + 1);
+            } else {
+              if (pixelPerFrame > 1) {
+                setPixelPerFrame(pixelPerFrame - 1);
+              }
+            }
+          }}
+        >
+          <TimeLineCanvas
+            leftOffset={leftOffset}
+            width={600}
+            pixelPerFrame={pixelPerFrame}
+          />
+        </div>
+        <TrackComponent
+          data={data}
+          pixelPerFrame={pixelPerFrame}
+          onUpdateLeftOffset={setLeftOffset}
+        />
+      </div>
+      <div style={{ userSelect: "none" }}>
+        {<p>pixel per frame: {pixelPerFrame}</p>}
+        {data.map((track) => (
+          <p key={track.key}>
+            {track.key}:
+            <br />
+            {track.clips.map((clip) => (
+              <span key={clip.key}>
+                {clip.key}: [{clip.start_frame} - {clip.end_frame}],
+              </span>
+            ))}
+          </p>
+        ))}
+      </div>
+    </>
+  );
+}
+export { wrapAsClip };
+export default Timeline;
