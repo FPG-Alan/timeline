@@ -19,11 +19,14 @@ const testTracks: Array<Track> = [
         stateNode: null,
       },
     ],
+    stateNode: null,
   },
   {
     key: "track-1",
     type: "image",
     index: 1,
+    stateNode: null,
+
     clips: [
       {
         key: "clip-0",
@@ -61,6 +64,8 @@ const testTracks: Array<Track> = [
     key: "track-2",
     type: "image",
     index: 2,
+    stateNode: null,
+
     clips: [
       {
         key: "clip-0",

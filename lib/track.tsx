@@ -19,6 +19,8 @@ import {
   initTrackOrder,
 } from "./utils";
 
+import TimelineData from "./data";
+
 type ActiveTrack = {
   trackIndex: number;
   reserveTrack?: "up" | "down";
@@ -38,6 +40,7 @@ const FIRST_SUPER_TRACK_HEIGHT = FORMAL_TRACK_HEIGHT + RESERVE_TRACK_HEIGHT * 2;
 const SUPER_TRACK_HEIGHT = FORMAL_TRACK_HEIGHT + RESERVE_TRACK_HEIGHT;
 // 右侧拓展区域长度， 单位为帧
 const EXTEND_FRAMES = 90;
+const STICK_FRAME = 5;
 
 type DragContext = {
   data: Track[];
@@ -58,7 +61,7 @@ type DragContext = {
   enableChangeTrack: boolean;
   enableMoveX: boolean;
 
-  clip: Clip | null;
+  clip: Clip | Partial<Clip> | null;
   track: Track | null;
 
   activeTrack: ActiveTrack | null;
@@ -78,61 +81,61 @@ function dragClipStart(
   clientY: number,
   track: Track,
   clip: Clip,
-  pixelPerFrame: number,
-  stickFrame: number,
   effectCallback?: (data: Track[]) => void
 ) {
-  currnetSourceDom = clip.stateNode;
-  currnetSourceDom!.style.visibility = "hidden";
-  const rect = currnetSourceDom!.getBoundingClientRect();
-  dragContext = {
-    data,
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height,
-    mouseX: clientX,
-    mouseY: clientY,
-    ppf: pixelPerFrame,
-    stickframe: stickFrame,
-    // 点击时， 指针相对当前clip块左上角的X轴上的读数
-    relativeX: clientX - rect.left,
-    relativeY: 0,
-    clip,
-    track,
-    enableChangeTrack: false,
-    enableMoveX: false,
-    activeTrack: null,
-    effectCallback,
-  };
+  if (clip.stateNode) {
+    currnetSourceDom = clip.stateNode;
+    currnetSourceDom!.style.visibility = "hidden";
+    const rect = currnetSourceDom!.getBoundingClientRect();
+    dragContext = {
+      data,
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      mouseX: clientX,
+      mouseY: clientY,
+      ppf: pixelPerFrame,
+      stickframe: STICK_FRAME,
+      // 点击时， 指针相对当前clip块左上角的X轴上的读数
+      relativeX: clientX - rect.left,
+      relativeY: 0,
+      clip,
+      track,
+      enableChangeTrack: false,
+      enableMoveX: false,
+      activeTrack: null,
+      effectCallback,
+    };
 
-  // 点击时， 指针相对当前clip块左上角的Y轴上的读数
-  const realRelativeY = clientY - rect.top;
-  // 转换为相对逻辑上的所有轨道的容器的左上角的Y轴上的位置
-  if (track.index === 0) {
-    dragContext.relativeY = realRelativeY + RESERVE_TRACK_HEIGHT;
-  } else {
-    dragContext.relativeY =
-      realRelativeY + //本底值
-      FIRST_SUPER_TRACK_HEIGHT + // 第一个track， 包含上下两条预备轨道
-      (track.index - 1) * SUPER_TRACK_HEIGHT; // 其他track， 只包含下面一条预备轨道
+    // 点击时， 指针相对当前clip块左上角的Y轴上的读数
+    const realRelativeY = clientY - rect.top;
+    // 转换为相对逻辑上的所有轨道的容器的左上角的Y轴上的位置
+    if (track.index === 0) {
+      dragContext.relativeY = realRelativeY + RESERVE_TRACK_HEIGHT;
+    } else {
+      dragContext.relativeY =
+        realRelativeY + //本底值
+        FIRST_SUPER_TRACK_HEIGHT + // 第一个track， 包含上下两条预备轨道
+        (track.index - 1) * SUPER_TRACK_HEIGHT; // 其他track， 只包含下面一条预备轨道
+    }
+
+    currentDragDom = document.createElement("div");
+    currentDragDom.style.position = "fixed";
+    currentDragDom.style.zIndex = "999";
+    currentDragDom.style.cursor = "pointer";
+    currentDragDom.style.top = dragContext.top + "px";
+    currentDragDom.style.left = dragContext.left + "px";
+    currentDragDom.style.width = dragContext.width + "px";
+    currentDragDom.style.height = dragContext.height + "px";
+
+    currentDragDom.style.background = currnetSourceDom!.style.background;
+
+    document.getElementsByTagName("body")[0].appendChild(currentDragDom);
+
+    window.addEventListener("mouseup", dragClipFinish);
+    window.addEventListener("mousemove", dragClip);
   }
-
-  currentDragDom = document.createElement("div");
-  currentDragDom.style.position = "fixed";
-  currentDragDom.style.zIndex = "999";
-  currentDragDom.style.cursor = "pointer";
-  currentDragDom.style.top = dragContext.top + "px";
-  currentDragDom.style.left = dragContext.left + "px";
-  currentDragDom.style.width = dragContext.width + "px";
-  currentDragDom.style.height = dragContext.height + "px";
-
-  currentDragDom.style.background = currnetSourceDom!.style.background;
-
-  document.getElementsByTagName("body")[0].appendChild(currentDragDom);
-
-  window.addEventListener("mouseup", dragClipFinish);
-  window.addEventListener("mousemove", dragClip);
 }
 
 function dragClip(e: MouseEvent) {
@@ -149,6 +152,7 @@ function dragClip(e: MouseEvent) {
   if (dragContext.enableChangeTrack) {
     // 计算相对包含所有track的坐标系原点的累加值
     const tmpAccY = dragContext.relativeY + moveY;
+    console.log(tmpAccY);
 
     // 根据这个累加值， 得到当前所在的轨道(包括正轨和间轨)索引 logicTrackIndex
     let activeTrackInfo: ActiveTrack = {
@@ -188,14 +192,20 @@ function dragClip(e: MouseEvent) {
         activeTrackInfo.reserveTrack = "down";
         currentDragDom!.style.top = dragContext.top + moveY + "px";
       } else {
-        currentDragDom!.style.top =
-          dragContext.top +
-          (activeTrackInfo.trackIndex - dragContext.track!.index) *
-            SUPER_TRACK_HEIGHT +
-          "px";
+        if (dragContext.track) {
+          currentDragDom!.style.top =
+            dragContext.top +
+            (activeTrackInfo.trackIndex - dragContext.track!.index) *
+              SUPER_TRACK_HEIGHT +
+            "px";
+        } else {
+          currentDragDom!.style.top =
+            activeTrackInfo.trackIndex * SUPER_TRACK_HEIGHT + "px";
+        }
       }
     }
 
+    console.log(activeTrackInfo);
     dragContext.activeTrack = activeTrackInfo;
 
     if (
@@ -204,8 +214,6 @@ function dragClip(e: MouseEvent) {
       (activeTrack.trackIndex === activeTrackInfo.trackIndex &&
         activeTrack.reserveTrack !== activeTrackInfo.reserveTrack)
     ) {
-      // console.log(activeTrackInfo);
-      // activeTrack = activeTrackInfo;
       if (activeTrack && activeTrack.highlight) {
         activeTrack.highlight.style.visibility = "hidden";
       }
@@ -215,6 +223,7 @@ function dragClip(e: MouseEvent) {
       const tmpTrack = dragContext.data[activeTrackInfo.trackIndex];
       const hightlights =
         tmpTrack.stateNode?.querySelectorAll(".highlight-line");
+      console.log("where is my high light");
       if (hightlights) {
         if (!activeTrackInfo.reserveTrack) {
           if (activeTrackInfo.trackIndex === 0) {
@@ -252,43 +261,46 @@ function dragClip(e: MouseEvent) {
     const skipSameKey =
       !dragContext.activeTrack ||
       (dragContext.activeTrack &&
-        dragContext.activeTrack.trackIndex === dragContext.track!.index);
+        dragContext.activeTrack.trackIndex === dragContext.track?.index);
     let shouldStick = false;
-    for (let i = 0, l = currentTrack!.clips.length; i < l; i += 1) {
-      const tmpClip = currentTrack!.clips[i];
-      const shouldCheck =
-        !skipSameKey || tmpClip.index !== dragContext.clip?.index;
-      if (shouldCheck) {
-        const rect = tmpClip.stateNode!.getBoundingClientRect();
-        // 向右吸附， 检查endFrame即可
-        if (tmpLeft + tmpWidth <= rect.left) {
-          if (
-            Math.abs(tmpLeft + tmpWidth - rect.left) <=
-            dragContext.stickframe * dragContext.ppf
-          ) {
-            shouldStick = true;
+    if (currentTrack) {
+      for (let i = 0, l = currentTrack!.clips.length; i < l; i += 1) {
+        const tmpClip = currentTrack!.clips[i];
+        const shouldCheck =
+          !skipSameKey || tmpClip.index !== dragContext.clip?.index;
+        if (shouldCheck) {
+          const rect = tmpClip.stateNode!.getBoundingClientRect();
+          // 向右吸附， 检查endFrame即可
+          if (tmpLeft + tmpWidth <= rect.left) {
+            if (
+              Math.abs(tmpLeft + tmpWidth - rect.left) <=
+              dragContext.stickframe * dragContext.ppf
+            ) {
+              shouldStick = true;
 
-            if (tmpClip.stateNode) {
-              const rect = tmpClip.stateNode.getBoundingClientRect();
-              const currentRect = currentDragDom!.getBoundingClientRect();
-              currentDragDom!.style.left = rect.left - currentRect.width + "px";
+              if (tmpClip.stateNode) {
+                const rect = tmpClip.stateNode.getBoundingClientRect();
+                const currentRect = currentDragDom!.getBoundingClientRect();
+                currentDragDom!.style.left =
+                  rect.left - currentRect.width + "px";
+              }
+
+              break;
             }
-
-            break;
           }
-        }
-        // 向左吸附， 检查startFrame
-        if (tmpLeft >= rect.left + rect.width) {
-          if (
-            Math.abs(tmpLeft - (rect.left + rect.width)) <=
-            dragContext.stickframe * dragContext.ppf
-          ) {
-            shouldStick = true;
-            if (tmpClip.stateNode) {
-              const rect = tmpClip.stateNode.getBoundingClientRect();
-              currentDragDom!.style.left = rect.left + rect.width + "px";
+          // 向左吸附， 检查startFrame
+          if (tmpLeft >= rect.left + rect.width) {
+            if (
+              Math.abs(tmpLeft - (rect.left + rect.width)) <=
+              dragContext.stickframe * dragContext.ppf
+            ) {
+              shouldStick = true;
+              if (tmpClip.stateNode) {
+                const rect = tmpClip.stateNode.getBoundingClientRect();
+                currentDragDom!.style.left = rect.left + rect.width + "px";
+              }
+              break;
             }
-            break;
           }
         }
       }
@@ -372,19 +384,70 @@ function dragClipFinish(e: MouseEvent) {
   dragContext.effectCallback?.(dragContext.data);
 }
 
+export function wrapAsClip(dom: HTMLElement, totalFrame: number) {
+  console.log(dom, totalFrame);
+
+  dom.addEventListener("mousedown", (e) => {
+    console.log(e.clientY, TimelineData.data);
+    // currnetSourceDom = clip.stateNode;
+    // currnetSourceDom!.style.visibility = "hidden";
+    const rect = dom.getBoundingClientRect();
+    dragContext = {
+      data: TimelineData.data,
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      ppf: pixelPerFrame,
+      stickframe: STICK_FRAME,
+      // 点击时， 指针相对当前clip块左上角的X轴上的读数
+      relativeX: e.clientX - rect.left,
+      relativeY: e.clientY,
+      clip: {
+        stateNode: dom as HTMLDivElement,
+        start_frame: 1,
+        end_frame: totalFrame,
+      },
+      track: null,
+      enableChangeTrack: true,
+      enableMoveX: true,
+      activeTrack: null,
+    };
+
+    currentDragDom = document.createElement("div");
+    currentDragDom.style.position = "fixed";
+    currentDragDom.style.zIndex = "999";
+    currentDragDom.style.cursor = "pointer";
+    currentDragDom.style.top = dragContext.top + "px";
+    currentDragDom.style.left = dragContext.left + "px";
+    currentDragDom.style.width = pixelPerFrame * totalFrame + "px";
+    currentDragDom.style.height = 30 + "px";
+
+    currentDragDom.style.background = dom!.style.background;
+
+    document.getElementsByTagName("body")[0].appendChild(currentDragDom);
+
+    window.addEventListener("mouseup", dragClipFinish);
+    window.addEventListener("mousemove", dragClip);
+  });
+}
+
+let pixelPerFrame = 2;
+
 const TrackComponent: FC<{
   data: Track[];
   pixelPerFrame: number;
   onUpdateLeftOffset: (leftOffset: number) => void;
-}> = ({ data, pixelPerFrame, onUpdateLeftOffset }) => {
+}> = ({ data, pixelPerFrame: nextPixelPerFrame, onUpdateLeftOffset }) => {
+  pixelPerFrame = nextPixelPerFrame;
   const [localData, setLocalData] = useState(data);
   const [activeTrack, setActiveTrack] = useState<ActiveTrack | null>(null);
   const [activeClipTrigger, setActiveClipTrigger] =
     useState<ActiveClipTrigger | null>(null);
   const totalFrame = useRef(calcTotalFrames(data) + EXTEND_FRAMES);
 
-  // 相差多少帧， 两个clip就吸附到一起
-  const stickFrame = useRef(5);
   const tracksRef = useRef<HTMLDivElement>(null);
 
   const forceUpdate = useForceUpdate();
@@ -578,8 +641,7 @@ const TrackComponent: FC<{
                         e.clientY,
                         track,
                         clip,
-                        pixelPerFrame,
-                        stickFrame.current,
+
                         (nextData) => {
                           totalFrame.current =
                             calcTotalFrames(nextData) + EXTEND_FRAMES;
@@ -678,9 +740,5 @@ const TrackComponent: FC<{
     </div>
   );
 };
-
-export function wrapAsClip(dom: HTMLElement, totalFrame: number) {
-  console.log(dom, totalFrame);
-}
 
 export default TrackComponent;

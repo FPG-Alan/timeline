@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import TimeLineCanvas from "./timeline";
 
 import style from "./style.module.css";
 import { Track } from "./interface";
 import TrackComponent, { wrapAsClip } from "./track";
+import TimelineData from "./data";
 
 type DragContext = {
   mouseX: number;
@@ -21,6 +22,10 @@ function Timeline({ data }: { data: Array<Track> }) {
   const [currentFrame, setCurrentFrame] = useState(0);
 
   const seekLineRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    TimelineData.setData(data);
+  }, []);
 
   // -----------------------------------drag seek line-------------------------------------------------
   const startDragSeekLine = useCallback((e) => {
