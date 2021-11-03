@@ -85,6 +85,8 @@ body {
   left: 0;
   border-bottom: 1px solid #ed2576;
   z-index: 1;
+
+  visibility: hidden;
 }
 
 .timeline-wrapper .tracks .clip {

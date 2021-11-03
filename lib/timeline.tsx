@@ -1,17 +1,16 @@
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, useEffect, useRef } from "react";
+import TimelineData from "./data";
 
 type TimeLineProps = {
   // 一般为负值， 最大为0
   leftOffset: number;
   width: number;
-
-  pixelPerFrame: number;
 };
 const CANVAS_HEIGHT = 50;
 const FPS = 30;
 // 两个主时间点间距, 单位为秒
 const BIG_STEP = 1;
-const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
+const TimeLine: FC<TimeLineProps> = ({ leftOffset, width }) => {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (canvas.current) {
@@ -58,7 +57,7 @@ const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
             );
           }
 
-          const scopeWidth = BIG_STEP * FPS * pixelPerFrame;
+          const scopeWidth = BIG_STEP * FPS * TimelineData.ppf;
           const targetPosition = currentPosition + scopeWidth;
           const tempStep = scopeWidth / 10;
           currentPosition += tempStep;
@@ -78,7 +77,7 @@ const TimeLine: FC<TimeLineProps> = ({ leftOffset, pixelPerFrame, width }) => {
         }
       }
     }
-  }, [leftOffset, pixelPerFrame]);
+  }, [leftOffset, TimelineData.ppf]);
   return <canvas width={width} height={CANVAS_HEIGHT} ref={canvas} />;
 };
 

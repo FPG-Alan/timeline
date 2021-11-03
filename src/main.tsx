@@ -92,14 +92,14 @@ const testTracks: Array<Track> = [
 function App() {
   return (
     <div>
-      <Timeline data={testTracks} />
+      <Timeline data={testTracks} debug />
 
-      <div
+      {/* <div
         style={{ width: 300, height: 80, background: "#654321" }}
         ref={(ref) => {
           wrapAsClip(ref, 50);
         }}
-      />
+      /> */}
     </div>
   );
 }

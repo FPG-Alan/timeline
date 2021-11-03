@@ -14,6 +14,8 @@ import {
 } from "./utils";
 
 import TimelineData from "./data";
+import { observer } from "mobx-react-lite";
+import { toJS } from "mobx";
 
 type ActiveTrack = {
   trackIndex: number;
@@ -33,8 +35,7 @@ const RESERVE_TRACK_HEIGHT = 15;
 // 在mouse down / mouse move 事件回调中启用
 const FIRST_SUPER_TRACK_HEIGHT = FORMAL_TRACK_HEIGHT + RESERVE_TRACK_HEIGHT * 2;
 const SUPER_TRACK_HEIGHT = FORMAL_TRACK_HEIGHT + RESERVE_TRACK_HEIGHT;
-// 右侧拓展区域长度， 单位为帧
-const EXTEND_FRAMES = 90;
+
 const STICK_FRAME = 5;
 
 type DragContext = {
@@ -49,9 +50,6 @@ type DragContext = {
   width: number;
   height: number;
 
-  ppf: number;
-  stickframe: number;
-
   enableChangeTrack: boolean;
   enableMoveX: boolean;
 
@@ -63,14 +61,12 @@ type DragContext = {
   effectCallback?: (data: Track[]) => void;
   // for drag to extend only
   dragDir?: "left" | "right";
+  tracksScrollLeft?: number;
 };
 let dragContext: DragContext;
 let currnetSourceDom: HTMLDivElement | null = null;
 let currentDragDom: HTMLDivElement | null = null;
-/**
- * 给X/Y轴上的相对位移
- * 输出 drag dom 此时位置
- */
+
 function onClipMoveHandle(accX: number, accY: number) {
   const tmpCurrentTop = dragContext.top + accY;
   const tmpCurrentLeft = dragContext.left + accX;
@@ -204,7 +200,7 @@ function onClipMoveHandle(accX: number, accY: number) {
             if (tmpLeft + tmpWidth <= rect.left) {
               if (
                 Math.abs(tmpLeft + tmpWidth - rect.left) <=
-                dragContext.stickframe * dragContext.ppf
+                STICK_FRAME * TimelineData.ppf
               ) {
                 shouldStick = true;
 
@@ -222,7 +218,7 @@ function onClipMoveHandle(accX: number, accY: number) {
             if (tmpLeft >= rect.left + rect.width) {
               if (
                 Math.abs(tmpLeft - (rect.left + rect.width)) <=
-                dragContext.stickframe * dragContext.ppf
+                STICK_FRAME * TimelineData.ppf
               ) {
                 shouldStick = true;
                 if (tmpClip.stateNode) {
@@ -274,8 +270,6 @@ function dragClipStart(
       height: rect.height,
       mouseX: clientX,
       mouseY: clientY,
-      ppf: pixelPerFrame,
-      stickframe: STICK_FRAME,
       clip,
       track,
       enableChangeTrack: false,
@@ -310,57 +304,64 @@ function dragClipFinish(e: MouseEvent) {
     const rect = currentDragDom.getBoundingClientRect();
     const moveX = rect.left - dragContext.left;
 
-    const shiftFrame = Math.ceil(Math.abs(moveX) / dragContext.ppf);
+    const shiftFrame = Math.ceil(Math.abs(moveX) / TimelineData.ppf);
 
-    if (moveX > 0) {
-      dragContext.clip!.start_frame! += shiftFrame;
-      dragContext.clip!.end_frame! += shiftFrame;
-    } else if (moveX < 0) {
-      dragContext.clip!.start_frame! -= shiftFrame;
-      dragContext.clip!.end_frame! -= shiftFrame;
-    }
-
-    if (dragContext.clip!.start_frame! < 0) {
-      dragContext.clip!.end_frame! += dragContext.clip!.start_frame! * -1;
-      dragContext.clip!.start_frame = 0;
-    }
-
-    // 处理可能存在的变轨操作(变更轨道或增加轨道)
-    const clipIndex = dragContext.track!.clips.findIndex(
-      (clip) => clip.key === dragContext.clip!.key
+    // 取出非 observable 的数据
+    const track = dragContext.data.find(
+      (track) => track.index === dragContext.track!.index
     );
-    // 先从原轨道上移除
-    dragContext.track!.clips.splice(clipIndex, 1);
+    const clipIndex = track?.clips.findIndex(
+      (item) => item.index === dragContext.clip?.index
+    );
+    const clip =
+      clipIndex !== undefined && clipIndex !== -1 && track?.clips[clipIndex];
 
-    if (
-      (dragContext.activeTrack && !dragContext.activeTrack.reserveTrack) ||
-      !dragContext.activeTrack
-    ) {
-      // 变轨
-      const targetTrack =
-        (dragContext.activeTrack &&
-          dragContext.data.find(
-            (track) => track.index === dragContext.activeTrack!.trackIndex
-          )) ||
-        dragContext.track;
-      addClipToTrack(targetTrack!, dragContext.clip as Clip);
-    } else if (
-      dragContext.activeTrack &&
-      dragContext.activeTrack.reserveTrack
-    ) {
-      // 增轨
-      addTrack(
-        dragContext.data,
-        dragContext.activeTrack!,
-        dragContext.clip as Clip
-      );
+    if (track && clip) {
+      if (moveX > 0) {
+        clip.start_frame += shiftFrame;
+        clip.end_frame += shiftFrame;
+      } else if (moveX < 0) {
+        clip.start_frame -= shiftFrame;
+        clip.end_frame -= shiftFrame;
+      }
+
+      if (clip.start_frame! < 0) {
+        clip.end_frame += clip.start_frame * -1;
+        clip.start_frame = 0;
+      }
+      // 处理可能存在的变轨操作(变更轨道或增加轨道)
+      // 先从原轨道上移除
+      track.clips.splice(clipIndex, 1);
+
+      if (
+        (dragContext.activeTrack && !dragContext.activeTrack.reserveTrack) ||
+        !dragContext.activeTrack
+      ) {
+        // 变轨
+        const targetTrack =
+          (dragContext.activeTrack &&
+            dragContext.data.find(
+              (track) => track.index === dragContext.activeTrack!.trackIndex
+            )) ||
+          track;
+        addClipToTrack(targetTrack, clip);
+      } else if (
+        dragContext.activeTrack &&
+        dragContext.activeTrack.reserveTrack
+      ) {
+        // 增轨
+        addTrack(dragContext.data, dragContext.activeTrack, clip);
+      }
+
+      cleanTrack(dragContext.data);
+      initTrackOrder(dragContext.data);
     }
-
-    cleanTrack(dragContext.data);
-    initTrackOrder(dragContext.data);
 
     document.getElementsByTagName("body")[0].removeChild(currentDragDom);
     currentDragDom = null;
+
+    // 一次性更新所有的数据
+    TimelineData.updateTracks(dragContext.data);
   }
 
   if (currnetSourceDom) {
@@ -386,6 +387,7 @@ function dragNewClip(e: MouseEvent) {
 
   onClipMoveHandle(accX, accY);
 }
+
 function dragNewClipFinish(e: MouseEvent) {
   window.removeEventListener("mousemove", dragNewClip);
   window.removeEventListener("mouseup", dragNewClipFinish);
@@ -399,7 +401,7 @@ function dragNewClipFinish(e: MouseEvent) {
 
       // 计算start_frame
       const rect = currentDragDom.getBoundingClientRect();
-      const start_frame = rect.left / pixelPerFrame;
+      const start_frame = rect.left / TimelineData.ppf;
 
       const newClip: Clip = {
         key: "clip-new",
@@ -422,29 +424,127 @@ function dragNewClipFinish(e: MouseEvent) {
           addClipToTrack(targetTrack, newClip);
         }
       }
+
+      cleanTrack(dragContext.data);
+      initTrackOrder(dragContext.data);
+
+      TimelineData.updateTracks(dragContext.data);
     }
 
-    cleanTrack(dragContext.data);
-    initTrackOrder(dragContext.data);
     document.getElementsByTagName("body")[0].removeChild(currentDragDom);
-
     dragContext.activeTrack = null;
     currentDragDom = null;
   }
-  forceUpdate();
 
   document.getElementsByTagName("body")[0].style.userSelect = "auto";
+}
+
+function dragToExtendStart(
+  e: React.MouseEvent<HTMLDivElement>,
+  dragDir: "left" | "right",
+  track: Track,
+  clip: Clip,
+  effectCallback: (data: Track[]) => void
+) {
+  currnetSourceDom = clip.stateNode;
+  const rect = currnetSourceDom!.getBoundingClientRect();
+  const tracksContainer = document.getElementById("tracks-container");
+
+  // @ts-ignore
+  dragContext = {
+    data: toJS(TimelineData.tracks),
+    mouseX: e.clientX,
+
+    left: rect.left,
+    width: rect.width,
+
+    tracksRect: tracksContainer?.getBoundingClientRect(),
+
+    clip,
+    track,
+    dragDir: dragDir,
+    tracksScrollLeft: tracksContainer?.scrollLeft,
+
+    activeTrack: null,
+    effectCallback,
+  };
+
+  window.addEventListener("mouseup", finishDragToExtendHandler);
+  window.addEventListener("mousemove", dragToExtendHandler);
+}
+
+function dragToExtendHandler(e: MouseEvent) {
+  // 逻辑上， 拖拽块持续的跟着鼠标移动
+  const moveX = e.clientX - dragContext.mouseX;
+  //最小不能小于一帧
+  if (dragContext.dragDir === "right") {
+    const tmpWitdh = Math.max(dragContext.width + moveX, TimelineData.ppf);
+
+    dragContext.clip!.stateNode!.style.width = tmpWitdh + "px";
+  } else {
+    const tmpWitdh = Math.max(dragContext.width - moveX, TimelineData.ppf);
+
+    dragContext.clip!.stateNode!.style.width = tmpWitdh + "px";
+    dragContext.clip!.stateNode!.style.left =
+      dragContext.left +
+      (dragContext.tracksScrollLeft || 0) -
+      (dragContext.tracksRect?.left || 0) +
+      (dragContext.width - tmpWitdh) +
+      "px";
+  }
+}
+
+function finishDragToExtendHandler(e: MouseEvent) {
+  window.removeEventListener("mousemove", dragToExtendHandler);
+  window.removeEventListener("mouseup", finishDragToExtendHandler);
+
+  // 取出非 observable 的数据
+  const track = dragContext.data.find(
+    (track) => track.index === dragContext.track!.index
+  );
+  const clipIndex = track?.clips.findIndex(
+    (item) => item.index === dragContext.clip?.index
+  );
+  const clip =
+    clipIndex !== undefined && clipIndex !== -1 && track?.clips[clipIndex];
+
+  if (track && clip) {
+    if (dragContext.dragDir === "right") {
+      // 右侧拖动， 只需要根据新的宽度算出新的end_frame
+      const rect = clip.stateNode!.getBoundingClientRect();
+
+      clip.end_frame =
+        clip.start_frame! + Math.ceil(rect.width / TimelineData.ppf) - 1;
+    } else {
+      // 左侧拖动， 只需要结算新的start_frame
+      const rect = clip.stateNode!.getBoundingClientRect();
+
+      clip.start_frame =
+        clip.end_frame - Math.ceil(rect.width / TimelineData.ppf) + 1;
+    }
+
+    // 先从原轨道上移除
+    track.clips.splice(clipIndex, 1);
+    addClipToTrack(track, clip);
+
+    cleanTrack(dragContext.data);
+    initTrackOrder(dragContext.data);
+
+    TimelineData.updateTracks(dragContext.data);
+  }
+
+  dragContext.effectCallback?.(dragContext.data);
 }
 
 export function wrapAsClip(dom: HTMLDivElement, totalFrame: number) {
   dom.addEventListener("mousedown", (e) => {
     const rect = dom.getBoundingClientRect();
     const tracksContainer = document.getElementById("tracks-container");
-    const tmpWidth = pixelPerFrame * totalFrame;
+    const tmpWidth = TimelineData.ppf * totalFrame;
     const initTop = e.clientY - 15;
     const initLeft = e.clientX - tmpWidth / 2;
     dragContext = {
-      data: TimelineData.data,
+      data: toJS(TimelineData.tracks),
       tracksRect: tracksContainer?.getBoundingClientRect(),
 
       top: initTop,
@@ -453,8 +553,6 @@ export function wrapAsClip(dom: HTMLDivElement, totalFrame: number) {
       height: rect.height,
       mouseX: e.clientX,
       mouseY: e.clientY,
-      ppf: pixelPerFrame,
-      stickframe: STICK_FRAME,
 
       clip: {
         stateNode: dom as HTMLDivElement,
@@ -481,132 +579,11 @@ export function wrapAsClip(dom: HTMLDivElement, totalFrame: number) {
   });
 }
 
-let pixelPerFrame = 2;
-let forceUpdate: () => void;
-
 const TrackComponent: FC<{
-  data: Track[];
-  pixelPerFrame: number;
   onUpdateLeftOffset: (leftOffset: number) => void;
-}> = ({ data, pixelPerFrame: nextPixelPerFrame, onUpdateLeftOffset }) => {
-  pixelPerFrame = nextPixelPerFrame;
-  const [localData, setLocalData] = useState(data);
-  const [activeTrack, setActiveTrack] = useState<ActiveTrack | null>(null);
+}> = observer(({ onUpdateLeftOffset }) => {
   const [activeClipTrigger, setActiveClipTrigger] =
     useState<ActiveClipTrigger | null>(null);
-  const totalFrame = useRef(calcTotalFrames(data) + EXTEND_FRAMES);
-
-  const tracksRef = useRef<HTMLDivElement>(null);
-
-  forceUpdate = useForceUpdate();
-
-  // -----------------------------------drag clip && extend clip---------------------------------------
-  const startDragToExtend = useCallback(
-    (
-      e: React.MouseEvent<HTMLDivElement>,
-      dragDir: "left" | "right",
-      track: Track,
-      clip: Clip
-    ) => {
-      dragContext.mouseX = e.clientX;
-
-      currnetSourceDom = clip.stateNode;
-      const rect = currnetSourceDom!.getBoundingClientRect();
-
-      dragContext.left = rect.left;
-      dragContext.width = rect.width;
-
-      dragContext.ppf = pixelPerFrame;
-      dragContext.clip = clip;
-      dragContext.dragDir = dragDir;
-      dragContext.track = track;
-
-      dragContext.activeTrack = null;
-
-      window.addEventListener("mouseup", finishDragToExtendHandler);
-      window.addEventListener("mousemove", dragToExtendHandler);
-    },
-    [pixelPerFrame]
-  );
-
-  const dragToExtendHandler = useCallback((e) => {
-    // 逻辑上， 拖拽块持续的跟着鼠标移动
-    const moveX = e.clientX - dragContext.mouseX;
-    //最小不能小于一帧
-    if (dragContext.dragDir === "right") {
-      const tmpWitdh = Math.max(dragContext.width + moveX, dragContext.ppf);
-
-      dragContext.clip!.stateNode!.style.width = tmpWitdh + "px";
-    } else {
-      const tmpWitdh = Math.max(dragContext.width - moveX, dragContext.ppf);
-
-      dragContext.clip!.stateNode!.style.width = tmpWitdh + "px";
-      dragContext.clip!.stateNode!.style.left =
-        dragContext.left +
-        (tracksRef.current?.scrollLeft || 0) +
-        (dragContext.width - tmpWitdh) +
-        "px";
-    }
-  }, []);
-  const finishDragToExtendHandler = useCallback((e) => {
-    window.removeEventListener("mousemove", dragToExtendHandler);
-    window.removeEventListener("mouseup", finishDragToExtendHandler);
-    if (dragContext.dragDir === "right") {
-      // 右侧拖动， 只需要根据新的宽度算出新的end_frame
-
-      const rect = dragContext.clip!.stateNode!.getBoundingClientRect();
-
-      dragContext.clip!.end_frame =
-        dragContext.clip!.start_frame! +
-        Math.ceil(rect.width / dragContext.ppf) -
-        1;
-    } else {
-      // 左侧拖动， 只需要结算新的start_frame
-
-      const rect = dragContext.clip!.stateNode!.getBoundingClientRect();
-
-      dragContext.clip!.start_frame =
-        dragContext.clip!.end_frame! -
-        Math.ceil(rect.width / dragContext.ppf) +
-        1;
-    }
-
-    // 根据新的帧数更新total frame
-    totalFrame.current = calcTotalFrames(data) + EXTEND_FRAMES;
-
-    // 处理可能存在的变轨操作(变更轨道或增加轨道)
-    const clipIndex = dragContext.track!.clips.findIndex(
-      (clip) => clip.key === dragContext.clip!.key
-    );
-    // 先从原轨道上移除
-    dragContext.track!.clips.splice(clipIndex, 1);
-
-    if (
-      (dragContext.activeTrack && !dragContext.activeTrack.reserveTrack) ||
-      !dragContext.activeTrack
-    ) {
-      // 变轨
-      const targetTrack =
-        (dragContext.activeTrack &&
-          data.find(
-            (track) => track.index === dragContext.activeTrack!.trackIndex
-          )) ||
-        dragContext.track;
-      addClipToTrack(targetTrack!, dragContext.clip as Clip);
-    } else if (
-      dragContext.activeTrack &&
-      dragContext.activeTrack.reserveTrack
-    ) {
-      // 增轨
-      addTrack(data, dragContext.activeTrack, dragContext.clip as Clip);
-    }
-
-    cleanTrack(data);
-    initTrackOrder(data);
-
-    setActiveClipTrigger(null);
-    forceUpdate();
-  }, []);
 
   return (
     <div
@@ -615,12 +592,11 @@ const TrackComponent: FC<{
       onScroll={(e) => {
         onUpdateLeftOffset((e.target as HTMLDivElement).scrollLeft * -1);
       }}
-      ref={tracksRef}
       style={{ userSelect: "none" }}
     >
       <div className="top-empty" style={{ height: 40 }} />
-      {localData.map((track, trackIndex) => {
-        const currentWidth = totalFrame.current * pixelPerFrame;
+      {TimelineData.tracks.map((track, trackIndex) => {
+        const currentWidth = TimelineData.totalFrames * TimelineData.ppf;
         return (
           <div
             key={track.key}
@@ -633,20 +609,9 @@ const TrackComponent: FC<{
                 style={{
                   height: RESERVE_TRACK_HEIGHT,
                   width: currentWidth,
-
-                  visibility: (activeTrack && "visible") || "hidden",
                 }}
               >
-                <div
-                  className={`${style["highlight-line"]} highlight-line`}
-                  style={{
-                    visibility:
-                      (activeTrack?.trackIndex === trackIndex &&
-                        activeTrack?.reserveTrack === "up" &&
-                        "visible") ||
-                      "hidden",
-                  }}
-                />
+                <div className={`${style["highlight-line"]} highlight-line`} />
               </div>
             )}
             <div
@@ -657,16 +622,7 @@ const TrackComponent: FC<{
                 width: currentWidth,
               }}
             >
-              <div
-                className={`${style["highlight-line"]} highlight-line`}
-                style={{
-                  visibility:
-                    (activeTrack?.trackIndex === trackIndex &&
-                      !activeTrack?.reserveTrack &&
-                      "visible") ||
-                    "hidden",
-                }}
-              />
+              <div className={`${style["highlight-line"]} highlight-line`} />
 
               {track.clips.map((clip, clipIndex) => {
                 return (
@@ -675,9 +631,11 @@ const TrackComponent: FC<{
                     className={style["clip"]}
                     style={{
                       background: clip.color || "#2291ff",
-                      left: clip.start_frame * pixelPerFrame - pixelPerFrame,
+                      left:
+                        clip.start_frame * TimelineData.ppf - TimelineData.ppf,
                       width:
-                        (clip.end_frame - clip.start_frame + 1) * pixelPerFrame,
+                        (clip.end_frame - clip.start_frame + 1) *
+                        TimelineData.ppf,
                       zIndex:
                         (activeClipTrigger &&
                           activeClipTrigger.trackIndex === trackIndex &&
@@ -689,17 +647,11 @@ const TrackComponent: FC<{
                       e.preventDefault();
                       e.target = clip.stateNode!;
                       dragClipStart(
-                        data,
+                        toJS(TimelineData.tracks),
                         e.clientX,
                         e.clientY,
                         track,
-                        clip,
-
-                        (nextData) => {
-                          totalFrame.current =
-                            calcTotalFrames(nextData) + EXTEND_FRAMES;
-                          setLocalData([...nextData]);
-                        }
+                        clip
                       );
                     }}
                     ref={(ref) => {
@@ -728,7 +680,10 @@ const TrackComponent: FC<{
                             triggerDir: "left",
                           });
 
-                          startDragToExtend(e, "left", track, clip);
+                          dragToExtendStart(e, "left", track, clip, () => {
+                            console.log("???????????");
+                            setActiveClipTrigger(null);
+                          });
                         }}
                       />
                     </div>
@@ -758,7 +713,10 @@ const TrackComponent: FC<{
                             triggerDir: "right",
                           });
 
-                          startDragToExtend(e, "right", track, clip);
+                          dragToExtendStart(e, "right", track, clip, () => {
+                            console.log("???????????");
+                            setActiveClipTrigger(null);
+                          });
                         }}
                       />
                     </div>
@@ -772,19 +730,10 @@ const TrackComponent: FC<{
               style={{
                 height: RESERVE_TRACK_HEIGHT,
                 width: currentWidth,
-                visibility: (activeTrack && "visible") || "hidden",
+                // visibility: (activeTrack && "visible") || "hidden",
               }}
             >
-              <div
-                className={`${style["highlight-line"]} highlight-line`}
-                style={{
-                  visibility:
-                    (activeTrack?.trackIndex === trackIndex &&
-                      activeTrack?.reserveTrack === "down" &&
-                      "visible") ||
-                    "hidden",
-                }}
-              />
+              <div className={`${style["highlight-line"]} highlight-line`} />
             </div>
           </div>
         );
@@ -792,6 +741,6 @@ const TrackComponent: FC<{
       <div className="bottom-empty" style={{ height: 40 }} />
     </div>
   );
-};
+});
 
 export default TrackComponent;

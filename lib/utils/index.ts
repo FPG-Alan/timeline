@@ -158,8 +158,8 @@ export function createDragDom(
   dragDom.style.width = rect.width + "px";
   dragDom.style.height = rect.height + "px";
 
-  // dragDom.style.background = sourceDom!.style.background;
-  dragDom.style.background = "#999";
+  dragDom.style.background = sourceDom!.style.background;
+  // dragDom.style.background = "#999";
 
   document.getElementsByTagName("body")[0].appendChild(dragDom);
 
