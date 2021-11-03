@@ -61,7 +61,7 @@ function Timeline({ data }: { data: Array<Track> }) {
   return (
     <>
       <div
-        className={style["timeline-wrapper"]}
+        className={`${style["timeline-wrapper"]} timeline-wrapper`}
         style={{ overflow: "hidden", position: "relative" }}
         onClick={(e) => {
           // 从e.clientX到currentFrame

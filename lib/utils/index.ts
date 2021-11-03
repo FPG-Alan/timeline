@@ -99,6 +99,7 @@ export function addTrack(
 
           type: clip.type,
           clips: [{ ...clip, index: 0, key: "clip-0" }],
+          stateNode: null,
         });
         inserted = true;
       } else {
@@ -116,6 +117,7 @@ export function addTrack(
 
         type: clip.type,
         clips: [{ ...clip, index: 0, key: "clip-0" }],
+        stateNode: null,
       });
     }
   }
@@ -140,4 +142,26 @@ export function initTrackOrder(tracks: Track[]) {
       tracks[i].clips[j].key = `clip-${j}`;
     }
   }
+}
+
+export function createDragDom(
+  sourceDom: HTMLDivElement,
+  specifyRect?: { top: number; left: number; width: number; height: number }
+): HTMLDivElement {
+  const rect = specifyRect || sourceDom.getBoundingClientRect();
+  const dragDom = document.createElement("div");
+  dragDom.style.position = "fixed";
+  dragDom.style.zIndex = "999";
+  dragDom.style.cursor = "pointer";
+  dragDom.style.top = rect.top + "px";
+  dragDom.style.left = rect.left + "px";
+  dragDom.style.width = rect.width + "px";
+  dragDom.style.height = rect.height + "px";
+
+  // dragDom.style.background = sourceDom!.style.background;
+  dragDom.style.background = "#999";
+
+  document.getElementsByTagName("body")[0].appendChild(dragDom);
+
+  return dragDom;
 }
